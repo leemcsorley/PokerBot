@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace PokerCore
 {
-    public class Game
+    public class GameEngine
     {
         private Random _rnd;
         private Deck _deck;
@@ -58,7 +58,7 @@ namespace PokerCore
             public List<PlayerAction> AllActions { get; set; }
         }
 
-        public Game(IPlayer[] players, ushort small, ushort big, Random rnd)
+        public GameEngine(IPlayer[] players, ushort small, ushort big, Random rnd)
         {
             _rnd = rnd;
             _deck = new Deck(_rnd);
@@ -188,6 +188,48 @@ namespace PokerCore
             if (winner == null)
             {
                 // showdown
+                Hand best = null;
+                List<IPlayer> winners = new List<IPlayer>(12);
+
+                for (int i = 0; i < _numPlayers; i++)
+                {
+                    if (state.PlayerStates[i] == PlayerState.Out)
+                        continue;
+
+                    var hand = Hand.GetBestHand(new[] { _playerCards[i].Card1, 
+                                                         _playerCards[i].Card2,
+                                                         state.Flop[0],
+                                                         state.Flop[1],
+                                                         state.Flop[2],
+                                                         state.Turn,
+                                                         state.River });
+
+                    if (best == null)
+                    {
+                        best = hand;
+                        winners.Add(_players[i]);
+                    }
+                    else
+                    {
+                        int c = hand.CompareTo(best);
+                        if (c == 0)
+                            winners.Add(_players[i]);
+                        else
+                            if (c == 1)
+                            {
+                                winners.Clear();
+                                winners.Add(_players[i]);
+                                best = hand;
+                            }
+                    }
+                }
+
+                // distribute winnings
+
+            }
+            else
+            {
+
             }
         }
     }

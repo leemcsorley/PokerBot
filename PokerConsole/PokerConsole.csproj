@@ -13,7 +13,7 @@
     <FileAlignment>512</FileAlignment>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
+    <PlatformTarget>x86</PlatformTarget>
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
@@ -32,6 +32,10 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Cudafy.NET, Version=1.29.5576.13786, Culture=neutral, PublicKeyToken=63a4c9931616906b, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\PokerCore\packages\CUDAfy.NET.1.29.5576.13786\lib\net40\Cudafy.NET.dll</HintPath>
+    </Reference>
     <Reference Include="MathNet.Numerics">
       <HintPath>..\PokerCore\packages\MathNet.Numerics.3.8.0\lib\net40\MathNet.Numerics.dll</HintPath>
     </Reference>
@@ -51,12 +55,22 @@
   <ItemGroup>
     <None Include="App.config" />
     <None Include="packages.config" />
+    <None Include="Tools\place_these_executables_in_same_folder_as_Cudafy.NET.dll_" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\PokerCore\PokerCore.csproj">
       <Project>{f4ba19ca-3b0b-4b0a-909d-891916fefd62}</Project>
       <Name>PokerCore</Name>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Readme\CUDA.NET.Readme.txt" />
+    <Content Include="Readme\CUDAfy-License.txt" />
+    <Content Include="Readme\example_source_code.cs.txt" />
+    <Content Include="Readme\ILSpy-license.txt" />
+    <Content Include="Readme\README.txt" />
+    <Content Include="Tools\cudafycl.exe" />
+    <Content Include="Tools\CudafyViewer.exe" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
