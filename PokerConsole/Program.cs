@@ -38,7 +38,7 @@ namespace PokerConsole
             CudafyModes.DeviceId = 0;
             CudafyTranslator.Language = CudafyModes.Target == eGPUType.OpenCL || CudafyModes.Target == eGPUType.Emulator ? eLanguage.OpenCL : eLanguage.Cuda;
 
-            var hands = PokerCore.Gpu.Hand.Hands(7).Take(1).ToArray();
+            var hands = PokerCore.Gpu.Hand.Hands(7).Take(10).ToArray();
 
             var o = PokerCore.Gpu.Hand.Evaluate(hands, 7);
 

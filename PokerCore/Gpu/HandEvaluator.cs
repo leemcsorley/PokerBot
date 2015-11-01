@@ -1,5 +1,8 @@
-﻿using Cudafy;
+﻿#define OPENCL
+
+using Cudafy;
 using Cudafy.Host;
+using Cudafy.IntegerIntrinsics;
 using Cudafy.Translator;
 using System;
 using System.Collections.Generic;
@@ -137,6 +140,17 @@ namespace PokerCore.Gpu
         public const int DIAMOND_OFFSET = 13 * Diamonds;
         /// <exclude/>
         public const int HEART_OFFSET = 13 * Hearts;
+
+        private const uint SA2345 = 0x100F;
+        private const uint S23456 = 0x1F;
+        private const uint S34567 = 0x3E;
+        private const uint S45678 = 0x7C;
+        private const uint S56789 = 0xF8;
+        private const uint S678910 = 0x1F0;
+        private const uint S78910J = 0x3E0;
+        private const uint S8910JQ = 0x7C0;
+        private const uint S910JQK = 0xF80;
+        private const uint S10JQKA = 0x1F00;
 
         #region nBitsAndStr Table
         /// <exclude/>
@@ -41136,19 +41150,24 @@ namespace PokerCore.Gpu
         #endregion
 
         [Cudafy]
-        private static readonly UInt16[] nBitsAndStrTable = new UInt16[nBitsAndStrTable_Host.Length];
-
-        [Cudafy]
-        private static readonly UInt16[] nBitsTable = new UInt16[nBitsTable_Host.Length];
-
-        [Cudafy]
-        private static readonly UInt16[] straightTable = new ushort[straightTable_Host.Length];
-
-        [Cudafy]
-        private static readonly UInt32[] topFiveCardsTable = new uint[topFiveCardsTable_Host.Length];
-
-        [Cudafy]
-        private static readonly UInt16[] topCardTable = new ushort[topCardTable_Host.Length];
+        private static uint getTop5Cards(GThread thread, int ranks)
+        {
+            int c = 31 - thread.clz(ranks);
+            int top5cards = c << TOP_CARD_SHIFT;
+            ranks ^= 1 << c;
+            c = 31 - thread.clz(ranks);
+            top5cards |= c << SECOND_CARD_SHIFT;
+            ranks ^= 1 << c;
+            c = 31 - thread.clz(ranks);
+            top5cards |= c << THIRD_CARD_SHIFT;
+            ranks ^= 1 << c;
+            c = 31 - thread.clz(ranks);
+            top5cards |= c << FOURTH_CARD_SHIFT;
+            ranks ^= 1 << c;
+            c = 31 - thread.clz(ranks);
+            top5cards |= c << FIFTH_CARD_SHIFT;
+            return (uint)top5cards;
+        }
 
         [Cudafy]
         private static void evaluate(GThread thread, ulong[] hands, int numCards, int numHands, uint[] oranks)
@@ -41165,92 +41184,142 @@ namespace PokerCore.Gpu
                 uint sc = (uint)((cards >> (CLUB_OFFSET)) & 0x1fffUL);
                 uint sd = (uint)((cards >> (DIAMOND_OFFSET)) & 0x1fffUL);
                 uint sh = (uint)((cards >> (HEART_OFFSET)) & 0x1fffUL);
-                uint ss = (uint)((cards >> (SPADE_OFFSET)) & 0x1fffUL);
-
-                //uint sc = (uint)((cards >> (CLUB_OFFSET)) & 0xfff1UL);
-                //uint sd = (uint)((cards >> (DIAMOND_OFFSET)) & 0xfff1UL);
-                //uint sh = (uint)((cards >> (HEART_OFFSET)) & 0xfff1UL);
-                //uint ss = (uint)((cards >> (SPADE_OFFSET)) & 0xfff1UL);
+                uint ss = (uint)((cards >> (SPADE_OFFSET)) & 0x1fffUL); 
 
                 uint ranks = sc | sd | sh | ss;
-                uint n_ranks = nBitsTable[ranks];
-                uint n_dups = ((uint)(numCards - n_ranks));
-                bool done = false;
+                int n_ranks = thread.popcount(ranks);
+                int n_dups = numCards - n_ranks;
+                uint top5cards = getTop5Cards(thread, (int)ranks);
 
-                if (n_ranks >= 5)
+                if (thread.popcount(sc) >= 5)
                 {
-                    if (nBitsTable[ss] >= 5)
-                    {
-                        if (straightTable[ss] != 0)
-                        {
-                           retval = HANDTYPE_VALUE_STRAIGHTFLUSH + (uint)(straightTable[ss] << TOP_CARD_SHIFT);
-                           done = true;
-                        }
-                        else
-                            retval = HANDTYPE_VALUE_FLUSH + topFiveCardsTable[ss];
-                    }
-                    else if (nBitsTable[sc] >= 5)
-                    {
-                        if (straightTable[sc] != 0)
-                        {
-                            retval = HANDTYPE_VALUE_STRAIGHTFLUSH + (uint)(straightTable[sc] << TOP_CARD_SHIFT);
-                            done = true;
-                        }
-                        else
-                            retval = HANDTYPE_VALUE_FLUSH + topFiveCardsTable[sc];
-                    }
-                    else if (nBitsTable[sd] >= 5)
-                    {
-                        if (straightTable[sd] != 0)
-                        {
-                            retval = HANDTYPE_VALUE_STRAIGHTFLUSH + (uint)(straightTable[sd] << TOP_CARD_SHIFT);
-                            done = true;
-                        }
-                        else
-                            retval = HANDTYPE_VALUE_FLUSH + topFiveCardsTable[sd];
-                    }
-                    else if (nBitsTable[sh] >= 5)
-                    {
-                        if (straightTable[sh] != 0)
-                        {
-                            retval =  HANDTYPE_VALUE_STRAIGHTFLUSH + (uint)(straightTable[sh] << TOP_CARD_SHIFT);
-                            done = true;
-                        }
-                        else
-                            retval = HANDTYPE_VALUE_FLUSH + topFiveCardsTable[sh];
-                    }
+                    if ((sc & S10JQKA) == S10JQKA)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 10;
+                    else if ((sc & S910JQK) == S910JQK)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 9;
+                    else if ((sc & S8910JQ) == S8910JQ)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 8;
+                    else if ((sc & S78910J) == S78910J)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 7;
+                    else if ((sc & S678910) == S678910)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 6;
+                    else if ((sc & S56789) == S56789)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 5;
+                    else if ((sc & S45678) == S45678)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 4;
+                    else if ((sc & S34567) == S34567)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 3;
+                    else if ((sc & S23456) == S23456)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 2;
+                    else if ((sc & SA2345) == SA2345)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 1;
                     else
-                    {
-                        uint st = straightTable[ranks];
-                        if (st != 0)
-                            retval = HANDTYPE_VALUE_STRAIGHT + (st << TOP_CARD_SHIFT);
-                    };
-
-                    /* 
-                       Another win -- if there can't be a FH/Quads (n_dups < 3), 
-                       which is true most of the time when there is a made hand, then if we've
-                       found a five card hand, just return.  This skips the whole process of
-                       computing two_mask/three_mask/etc.
-                    */
-                    if (!done && retval != 0 && n_dups < 3)
-                    {
-                        done = true;
-                    }
+                        retval = HANDTYPE_VALUE_FLUSH + (uint)top5cards;
                 }
-
-                    /*
-                     * By the time we're here, either: 
-                       1) there's no five-card hand possible (flush or straight), or
-                       2) there's a flush or straight, but we know that there are enough
-                          duplicates to make a full house / quads possible.  
-                     */
-                if (!done)
+                else if (thread.popcount(sd) >= 5)
                 {
+                    if ((sd & S10JQKA) == S10JQKA)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 10;
+                    else if ((sd & S910JQK) == S910JQK)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 9;
+                    else if ((sd & S8910JQ) == S8910JQ)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 8;
+                    else if ((sd & S78910J) == S78910J)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 7;
+                    else if ((sd & S678910) == S678910)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 6;
+                    else if ((sd & S56789) == S56789)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 5;
+                    else if ((sd & S45678) == S45678)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 4;
+                    else if ((sd & S34567) == S34567)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 3;
+                    else if ((sd & S23456) == S23456)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 2;
+                    else if ((sd & SA2345) == SA2345)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 1;
+                    else
+                        retval = HANDTYPE_VALUE_FLUSH + (uint)top5cards;
+                } 
+                else if (thread.popcount(sh) >= 5)
+                {
+                    if ((sh & S10JQKA) == S10JQKA)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 10;
+                    else if ((sh & S910JQK) == S910JQK)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 9;
+                    else if ((sh & S8910JQ) == S8910JQ)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 8;
+                    else if ((sh & S78910J) == S78910J)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 7;
+                    else if ((sh & S678910) == S678910)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 6;
+                    else if ((sh & S56789) == S56789)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 5;
+                    else if ((sh & S45678) == S45678)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 4;
+                    else if ((sh & S34567) == S34567)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 3;
+                    else if ((sh & S23456) == S23456)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 2;
+                    else if ((sh & SA2345) == SA2345)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 1;
+                    else
+                        retval = HANDTYPE_VALUE_FLUSH + (uint)top5cards;
+                }
+                else if (thread.popcount(ss) >= 5)
+                {
+                    if ((ss & S10JQKA) == S10JQKA)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 10;
+                    else if ((ss & S910JQK) == S910JQK)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 9;
+                    else if ((ss & S8910JQ) == S8910JQ)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 8;
+                    else if ((ss & S78910J) == S78910J)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 7;
+                    else if ((ss & S678910) == S678910)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 6;
+                    else if ((ss & S56789) == S56789)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 5;
+                    else if ((ss & S45678) == S45678)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 4;
+                    else if ((ss & S34567) == S34567)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 3;
+                    else if ((ss & S23456) == S23456)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 2;
+                    else if ((ss & SA2345) == SA2345)
+                        retval = HANDTYPE_VALUE_STRAIGHTFLUSH + 1;
+                    else
+                        retval = HANDTYPE_VALUE_FLUSH + (uint)top5cards;
+                }
+                else
+                {
+                    if ((ranks & S10JQKA) == S10JQKA)
+                        retval = HANDTYPE_VALUE_STRAIGHT + 10;
+                    else if ((ranks & S910JQK) == S910JQK)
+                        retval = HANDTYPE_VALUE_STRAIGHT + 9;
+                    else if ((ranks & S8910JQ) == S8910JQ)
+                        retval = HANDTYPE_VALUE_STRAIGHT + 8;
+                    else if ((ranks & S78910J) == S78910J)
+                        retval = HANDTYPE_VALUE_STRAIGHT + 7;
+                    else if ((ranks & S678910) == S678910)
+                        retval = HANDTYPE_VALUE_STRAIGHT + 6;
+                    else if ((ranks & S56789) == S56789)
+                        retval = HANDTYPE_VALUE_STRAIGHT + 5;
+                    else if ((ranks & S45678) == S45678)
+                        retval = HANDTYPE_VALUE_STRAIGHT + 4;
+                    else if ((ranks & S34567) == S34567)
+                        retval = HANDTYPE_VALUE_STRAIGHT + 3;
+                    else if ((ranks & S23456) == S23456)
+                        retval = HANDTYPE_VALUE_STRAIGHT + 2;
+                    else if ((ranks & SA2345) == SA2345)
+                        retval = HANDTYPE_VALUE_STRAIGHT + 1;
+                }
+                
+                if (false) //retval == 0)
                     switch (n_dups)
                     {
                         case 0:
-                            /* It's a no-pair hand */
-                            retval = HANDTYPE_VALUE_HIGHCARD + topFiveCardsTable[ranks];
+                            retval = HANDTYPE_VALUE_HIGHCARD + (uint)top5cards;
                             break;
                         case 1:
                             {
@@ -41259,11 +41328,11 @@ namespace PokerCore.Gpu
 
                                 two_mask = ranks ^ (sc ^ sd ^ sh ^ ss);
 
-                                retval = (uint)(HANDTYPE_VALUE_PAIR + (topCardTable[two_mask] << TOP_CARD_SHIFT));
+                                retval = (uint)(HANDTYPE_VALUE_PAIR + ((31 - thread.clz((int)two_mask)) << TOP_CARD_SHIFT));
                                 t = ranks ^ two_mask;      /* Only one bit set in two_mask */
                                 /* Get the top five cards in what is left, drop all but the top three 
                                     * cards, and shift them by one to get the three desired kickers */
-                                kickers = (topFiveCardsTable[t] >> CARD_WIDTH) & ~FIFTH_CARD_MASK;
+                                kickers = ((uint)getTop5Cards(thread, (int)t) >> CARD_WIDTH) & ~FIFTH_CARD_MASK;
                                 retval += kickers;
                                 break;
                             }
@@ -41274,9 +41343,9 @@ namespace PokerCore.Gpu
                             {
                                 uint t = ranks ^ two_mask; /* Exactly two bits set in two_mask */
                                 retval = (uint)(HANDTYPE_VALUE_TWOPAIR
-                                    + (topFiveCardsTable[two_mask]
+                                    + (getTop5Cards(thread, (int)two_mask)
                                     & (TOP_CARD_MASK | SECOND_CARD_MASK))
-                                    + (topCardTable[t] << THIRD_CARD_SHIFT));
+                                    + ((31 - thread.clz((int)t)) << THIRD_CARD_SHIFT));
 
                                 break;
                             }
@@ -41284,12 +41353,12 @@ namespace PokerCore.Gpu
                             {
                                 uint t, second;
                                 three_mask = ((sc & sd) | (sh & ss)) & ((sc & sh) | (sd & ss));
-                                retval = (uint)(HANDTYPE_VALUE_TRIPS + (topCardTable[three_mask] << TOP_CARD_SHIFT));
+                                retval = (uint)(HANDTYPE_VALUE_TRIPS + ((31 - thread.clz((int)three_mask)) << TOP_CARD_SHIFT));
                                 t = ranks ^ three_mask; /* Only one bit set in three_mask */
-                                second = topCardTable[t];
+                                second = (uint)(31 - thread.clz((int)t));
                                 retval += (second << SECOND_CARD_SHIFT);
                                 t ^= (1U << (int)second);
-                                retval += (uint)(topCardTable[t] << THIRD_CARD_SHIFT);
+                                retval += (uint)((31 - thread.clz((int)t)) << THIRD_CARD_SHIFT);
                                 break;
                             }
                         default:
@@ -41297,10 +41366,10 @@ namespace PokerCore.Gpu
                             four_mask = sh & sd & sc & ss;
                             if (four_mask != 0)
                             {
-                                uint tc = topCardTable[four_mask];
+                                uint tc = (uint)(31 - thread.clz((int)four_mask));
                                 retval = (uint)(HANDTYPE_VALUE_FOUR_OF_A_KIND
                                     + (tc << TOP_CARD_SHIFT)
-                                    + ((topCardTable[ranks ^ (1U << (int)tc)]) << SECOND_CARD_SHIFT));
+                                    + ((31 - thread.clz((int)(ranks ^ (1U << (int)tc)))) << SECOND_CARD_SHIFT));
                                 break;
                             };
 
@@ -41311,23 +41380,23 @@ namespace PokerCore.Gpu
                                 already eliminated quads, we can use this shortcut */
 
                             two_mask = ranks ^ (sc ^ sd ^ sh ^ ss);
-                            if (nBitsTable[two_mask] != n_dups)
+                            if (thread.popcount(two_mask) != n_dups)
                             {
                                 /* Must be some trips then, which really means there is a 
                                     full house since n_dups >= 3 */
                                 uint tc, t;
                                 three_mask = ((sc & sd) | (sh & ss)) & ((sc & sh) | (sd & ss));
                                 retval = HANDTYPE_VALUE_FULLHOUSE;
-                                tc = topCardTable[three_mask];
+                                tc = (uint)(31 - thread.clz((int)three_mask));
                                 retval += (tc << TOP_CARD_SHIFT);
                                 t = (two_mask | three_mask) ^ (1U << (int)tc);
-                                retval += (uint)(topCardTable[t] << SECOND_CARD_SHIFT);
+                                retval += (uint)(31 - thread.clz((int)t) << SECOND_CARD_SHIFT);
                                 break;
                             };
 
                             if (retval != 0) /* flush and straight */
                             {
-                                    
+
                             }
                             else
                             {
@@ -41335,16 +41404,22 @@ namespace PokerCore.Gpu
                                 uint top, second;
 
                                 retval = HANDTYPE_VALUE_TWOPAIR;
-                                top = topCardTable[two_mask];
+                                top = (uint)(31 - thread.clz((int)two_mask));
                                 retval += (top << TOP_CARD_SHIFT);
-                                second = topCardTable[two_mask ^ (1 << (int)top)];
+                                second = (uint)(31 - thread.clz((int)(two_mask ^ (1 << (int)top))));
                                 retval += (second << SECOND_CARD_SHIFT);
-                                retval += (uint)((topCardTable[ranks ^ (1U << (int)top) ^ (1 << (int)second)]) << THIRD_CARD_SHIFT);
-                                    
+                                retval += (uint)((31 - thread.clz((int)(ranks ^ (1U << (int)top) ^ (1 << (int)second)))) << THIRD_CARD_SHIFT);
+
                             }
                             break;
                     }
-                }
+                    /*
+                     * By the time we're here, either: 
+                       1) there's no five-card hand possible (flush or straight), or
+                       2) there's a flush or straight, but we know that there are enough
+                          duplicates to make a full house / quads possible.  
+                     */
+
                 oranks[tid] = retval;
             }
         }
@@ -41362,12 +41437,6 @@ namespace PokerCore.Gpu
             uint[] dev_ranks = gpu.Allocate<uint>(hands.Length);
 
             gpu.CopyToDevice(hands, dev_hands);
-
-            gpu.CopyToConstantMemory(nBitsAndStrTable_Host, nBitsAndStrTable);
-            gpu.CopyToConstantMemory(nBitsTable_Host, nBitsTable);
-            gpu.CopyToConstantMemory(straightTable_Host, straightTable);
-            gpu.CopyToConstantMemory(topFiveCardsTable_Host, topFiveCardsTable);
-            gpu.CopyToConstantMemory(topCardTable_Host, topCardTable);
 
             gpu.Launch(hands.Length / 16 + 1, 16).evaluate(dev_hands, numCards, hands.Length, dev_ranks);
 
@@ -41441,41 +41510,43 @@ namespace PokerCore.Gpu
                 case HandType.FourOfAKind:
                     return DescriptionFromHandValueInternal(handvalue);
                 case HandType.Flush:
-                    if (nBitsTable[ss] >= 5)
-                    {
-                        return "Flush (Spades) with " + ranktbl[TopCard(handvalue)] + " high";
-                    }
-                    else if (nBitsTable[sc] >= 5)
-                    {
-                        return "Flush (Clubs) with " + ranktbl[TopCard(handvalue)] + " high";
-                    }
-                    else if (nBitsTable[sd] >= 5)
-                    {
-                        return "Flush (Diamonds) with " + ranktbl[TopCard(handvalue)] + " high";
-                    }
-                    else if (nBitsTable[sh] >= 5)
-                    {
-                        return "Flush (Hearts) with " + ranktbl[TopCard(handvalue)] + " high";
-                    }
-                    break;
+                    return "Flush";
+                    //if (nBitsTable[ss] >= 5)
+                    //{
+                    //    return "Flush (Spades) with " + ranktbl[TopCard(handvalue)] + " high";
+                    //}
+                    //else if (nBitsTable[sc] >= 5)
+                    //{
+                    //    return "Flush (Clubs) with " + ranktbl[TopCard(handvalue)] + " high";
+                    //}
+                    //else if (nBitsTable[sd] >= 5)
+                    //{
+                    //    return "Flush (Diamonds) with " + ranktbl[TopCard(handvalue)] + " high";
+                    //}
+                    //else if (nBitsTable[sh] >= 5)
+                    //{
+                    //    return "Flush (Hearts) with " + ranktbl[TopCard(handvalue)] + " high";
+                    //}
+                    //break;
                 case HandType.StraightFlush:
-                    if (nBitsTable[ss] >= 5)
-                    {
-                        return "Straight Flush (Spades) with " + ranktbl[TopCard(handvalue)] + " high";
-                    }
-                    else if (nBitsTable[sc] >= 5)
-                    {
-                        return "Straight (Clubs) with " + ranktbl[TopCard(handvalue)] + " high";
-                    }
-                    else if (nBitsTable[sd] >= 5)
-                    {
-                        return "Straight (Diamonds) with " + ranktbl[TopCard(handvalue)] + " high";
-                    }
-                    else if (nBitsTable[sh] >= 5)
-                    {
-                        return "Straight  (Hearts) with " + ranktbl[TopCard(handvalue)] + " high";
-                    }
-                    break;
+                    return "Straight Flush";
+                    //if (nBitsTable[ss] >= 5)
+                    //{
+                    //    return "Straight Flush (Spades) with " + ranktbl[TopCard(handvalue)] + " high";
+                    //}
+                    //else if (nBitsTable[sc] >= 5)
+                    //{
+                    //    return "Straight (Clubs) with " + ranktbl[TopCard(handvalue)] + " high";
+                    //}
+                    //else if (nBitsTable[sd] >= 5)
+                    //{
+                    //    return "Straight (Diamonds) with " + ranktbl[TopCard(handvalue)] + " high";
+                    //}
+                    //else if (nBitsTable[sh] >= 5)
+                    //{
+                    //    return "Straight  (Hearts) with " + ranktbl[TopCard(handvalue)] + " high";
+                    //}
+                    //break;
             }
             return "";
         }
