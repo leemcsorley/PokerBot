@@ -41181,10 +41181,10 @@ namespace PokerCore.Gpu
                 ulong cards = hands[tid];
 
                 // Seperate out by suit
-                uint sc = (uint)((cards >> (CLUB_OFFSET)) & 0x1fffUL);
-                uint sd = (uint)((cards >> (DIAMOND_OFFSET)) & 0x1fffUL);
-                uint sh = (uint)((cards >> (HEART_OFFSET)) & 0x1fffUL);
-                uint ss = (uint)((cards >> (SPADE_OFFSET)) & 0x1fffUL); 
+                uint sc = (uint)(cards & 0x1fful);//(uint)((cards >> (CLUB_OFFSET)) & 0x1fffUL);
+                uint sd = (uint)((cards / 8192ul) & 0x1fful); //(uint)((cards >> (DIAMOND_OFFSET)) & 0x1fffUL);
+                uint sh = (uint)((cards / (8192ul * 8192ul)) & 0x1fful); //((cards >> (HEART_OFFSET)) & 0x1fffUL);
+                uint ss = (uint)((cards / (8192ul * 8192ul * 8192ul)) & 0x1fful); // ((cards >> (SPADE_OFFSET)) & 0x1fffUL); 
 
                 uint ranks = sc | sd | sh | ss;
                 int n_ranks = thread.popcount(ranks);

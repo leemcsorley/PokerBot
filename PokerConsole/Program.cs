@@ -34,7 +34,7 @@ namespace PokerConsole
 
         static void Main(string[] args)
         {
-            CudafyModes.Target = eGPUType.Emulator; // To use OpenCL, change this enum
+            CudafyModes.Target = eGPUType.OpenCL; // To use OpenCL, change this enum
             CudafyModes.DeviceId = 0;
             CudafyTranslator.Language = CudafyModes.Target == eGPUType.OpenCL || CudafyModes.Target == eGPUType.Emulator ? eLanguage.OpenCL : eLanguage.Cuda;
 
