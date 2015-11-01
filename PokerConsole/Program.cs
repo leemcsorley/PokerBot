@@ -34,15 +34,20 @@ namespace PokerConsole
 
         static void Main(string[] args)
         {
-            CudafyModes.Target = eGPUType.OpenCL; // To use OpenCL, change this enum
+            CudafyModes.Target = eGPUType.Cuda; // To use OpenCL, change this enum
             CudafyModes.DeviceId = 0;
             CudafyTranslator.Language = CudafyModes.Target == eGPUType.OpenCL || CudafyModes.Target == eGPUType.Emulator ? eLanguage.OpenCL : eLanguage.Cuda;
+            CudafyTranslator.GenerateDebug = true;
 
-            var hands = PokerCore.Gpu.Hand.Hands(7).Take(10).ToArray();
+            var hands = PokerCore.Gpu.Hand.RandomHands(7, 10000000).ToArray();
 
             var o = PokerCore.Gpu.Hand.Evaluate(hands, 7);
 
-            var s = PokerCore.Gpu.Hand.DescriptionFromMask(hands[0], o[0]);
+            for (int i = 0; i < hands.Length; i++)
+            {
+                var s = PokerCore.Gpu.Hand.DescriptionFromMask(hands[i], o[i]);
+                var hs = PokerCore.Gpu.Hand.MaskToString(hands[i]);
+            }
 
             var rnd = new MathNet.Numerics.Random.MersenneTwister();
             var deck = new Deck(rnd);

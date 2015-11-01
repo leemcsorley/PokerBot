@@ -41181,10 +41181,13 @@ namespace PokerCore.Gpu
                 ulong cards = hands[tid];
 
                 // Seperate out by suit
-                uint sc = (uint)(cards & 0x1fful);//(uint)((cards >> (CLUB_OFFSET)) & 0x1fffUL);
-                uint sd = (uint)((cards / 8192ul) & 0x1fful); //(uint)((cards >> (DIAMOND_OFFSET)) & 0x1fffUL);
-                uint sh = (uint)((cards / (8192ul * 8192ul)) & 0x1fful); //((cards >> (HEART_OFFSET)) & 0x1fffUL);
-                uint ss = (uint)((cards / (8192ul * 8192ul * 8192ul)) & 0x1fful); // ((cards >> (SPADE_OFFSET)) & 0x1fffUL); 
+                uint sc = (uint)(cards & 8191ul);//(uint)((cards >> (CLUB_OFFSET)) & 0x1fffUL);
+                ulong c_ = cards / 8192ul;
+                uint sd = (uint)(c_ & 8191ul); //(uint)((cards >> (DIAMOND_OFFSET)) & 0x1fffUL);
+                c_ /= 8192ul;
+                uint sh = (uint)(c_ & 8191ul); //((cards >> (HEART_OFFSET)) & 0x1fffUL);
+                c_ /= 8192ul;
+                uint ss = (uint)(c_ & 8191ul); // ((cards >> (SPADE_OFFSET)) & 0x1fffUL); 
 
                 uint ranks = sc | sd | sh | ss;
                 int n_ranks = thread.popcount(ranks);
@@ -41315,7 +41318,7 @@ namespace PokerCore.Gpu
                         retval = HANDTYPE_VALUE_STRAIGHT + 1;
                 }
                 
-                if (false) //retval == 0)
+                if (retval == 0)
                     switch (n_dups)
                     {
                         case 0:
@@ -41427,7 +41430,7 @@ namespace PokerCore.Gpu
         public static uint[] Evaluate(ulong[] hands, int numCards)
         {
             // Translates this class to CUDA C and then compliles
-            CudafyModule km = CudafyTranslator.Cudafy();
+            CudafyModule km = CudafyTranslator.Cudafy(eArchitecture.sm_20);
 
             // Get the first GPU and load the module
             GPGPU gpu = CudafyHost.GetDevice(CudafyModes.Target, CudafyModes.DeviceId);
