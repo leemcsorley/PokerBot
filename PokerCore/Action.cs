@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 
 namespace PokerCore
 {
+    [Serializable]
     public struct Action
     {
         public Action(ActionType type, ushort amount)

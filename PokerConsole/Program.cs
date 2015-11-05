@@ -4,7 +4,10 @@ using Cudafy.Translator;
 using PokerCore;
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.IO.Compression;
 using System.Linq;
+using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -34,12 +37,36 @@ namespace PokerConsole
 
         static void Main(string[] args)
         {
-            CudafyModes.Target = eGPUType.Cuda; // To use OpenCL, change this enum
+            var games = PokerCore.Data.FullHistory.LoadHistoryBin(@"C:\Data\Poker\2015-11-03_STA_NL10_SH_QLVWN231\binary.dat");
+
+            var preflopModel = new PokerCore.Model.PreflopKNN(games);
+
+            BinaryFormatter bf = new BinaryFormatter();
+            int count = 0;
+            using (FileStream fs = new FileStream(@"C:\Data\Poker\2015-11-03_STA_NL10_SH_QLVWN231\binary.dat", FileMode.OpenOrCreate))
+            using (GZipStream zs = new GZipStream(fs, CompressionLevel.Fastest))
+            {
+                foreach (var game in PokerCore.Data.FullHistory.LoadHistoryHH(@"C:\Data\Poker\2015-11-03_STA_NL10_SH_QLVWN231").Take(100000))
+                {
+                    bf.Serialize(zs, game);
+                    count++; 
+                    if (count % 100 == 0)
+                        Console.WriteLine(count);
+
+                    
+                }
+            }
+            
+
+            CudafyModes.Target = eGPUType.OpenCL; // To use OpenCL, change this enum
             CudafyModes.DeviceId = 0;
             CudafyTranslator.Language = CudafyModes.Target == eGPUType.OpenCL || CudafyModes.Target == eGPUType.Emulator ? eLanguage.OpenCL : eLanguage.Cuda;
             CudafyTranslator.GenerateDebug = true;
 
-            var hands = PokerCore.Gpu.Hand.RandomHands(7, 10000000).ToArray();
+            var hands = PokerCore.Gpu.Hand.RandomHands(7, 256 * 256 * 256 * 2).ToArray();
+
+            //var hands = new Card[][] { new[] { Card.KingClubs, Card.KingDiamonds, Card.EightDiamonds, Card.SixHearts, Card.EightClubs, Card.SevenClubs, Card.TwoClubs } }
+            //    .Select(c => PokerCore.Gpu.Hand.ConvertHand(c)).ToArray();
 
             var o = PokerCore.Gpu.Hand.Evaluate(hands, 7);
 

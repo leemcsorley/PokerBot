@@ -8,6 +8,8 @@ namespace PokerCore
 {
     public interface IPlayer
     {
+        string Id { get; set; }
+
         uint Balance { get; set; }
 
         Action GetAction(IGameState state);

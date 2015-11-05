@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 
 namespace PokerCore
 {
+    [Serializable]
     public struct PlayerAction
     {
         public PlayerAction(int playerIndex, Action action)

@@ -25,8 +25,11 @@ namespace PokerCore
         {
             public GameState()
             {
-                AllActions = new List<PlayerAction>();
                 IsFinished = false;
+                PreFlopActions = new List<PlayerAction>();
+                FlopActions = new List<PlayerAction>();
+                TurnActions = new List<PlayerAction>();
+                RiverActions = new List<PlayerAction>();
             }
 
             public IPlayer[] Players { get; set; }
@@ -41,9 +44,9 @@ namespace PokerCore
 
             public Card[] Flop { get; set; }
 
-            public Card Turn { get; set; }
+            public Card? Turn { get; set; }
 
-            public Card River { get; set; }
+            public Card? River { get; set; }
 
             public PlayerState[] PlayerStates { get; set; }
 
@@ -55,7 +58,15 @@ namespace PokerCore
 
             public IPlayer Winner { get; set; }
 
-            public List<PlayerAction> AllActions { get; set; }
+            public uint Winnings { get; set; }
+
+            public List<PlayerAction> PreFlopActions { get; private set; }
+
+            public List<PlayerAction> FlopActions { get; private set; }
+
+            public List<PlayerAction> TurnActions { get; private set; }
+
+            public List<PlayerAction> RiverActions { get; private set; }
         }
 
         public GameEngine(IPlayer[] players, ushort small, ushort big, Random rnd)
@@ -101,7 +112,7 @@ namespace PokerCore
             }
         }
 
-        private bool RunRound(GameState state, bool preFlop, ref IPlayer winner)
+        private bool RunRound(GameState state, bool preFlop, ref IPlayer winner, List<PlayerAction> actionList)
         {
             var currentBet = preFlop ? _big : (ushort)0;
             var prevBet = -1;
@@ -122,7 +133,7 @@ namespace PokerCore
 
                     var p = _players[pi];
                     var action = p.GetAction(state);
-                    state.AllActions.Add(state.LastAction = new PlayerAction(pi, action));
+                    actionList.Add(state.LastAction = new PlayerAction(pi, action));
                     switch (action.Type)
                     {
                         case ActionType.Fold:
@@ -162,25 +173,25 @@ namespace PokerCore
 
             IPlayer winner = null;
             // pre flop
-            if (!RunRound(state, true, ref winner))
+            if (!RunRound(state, true, ref winner, state.PreFlopActions))
             {
                 // deal flop
                 state.Flop = new Card[] { _deck.DealCard(), _deck.DealCard(), _deck.DealCard() };
                 state.CurrentRound = Round.Flop;
 
-                if (!RunRound(state, false, ref winner))
+                if (!RunRound(state, false, ref winner, state.FlopActions))
                 {
                     // deal turn
                     state.Turn = _deck.DealCard();
                     state.CurrentRound = Round.Turn;
 
-                    if (!RunRound(state, false, ref winner))
+                    if (!RunRound(state, false, ref winner, state.TurnActions))
                     {
                         // deal river
                         state.River = _deck.DealCard();
                         state.CurrentRound = Round.River;
 
-                        RunRound(state, false, ref winner);
+                        RunRound(state, false, ref winner, state.RiverActions);
                     }
                 }
             }
@@ -201,8 +212,8 @@ namespace PokerCore
                                                          state.Flop[0],
                                                          state.Flop[1],
                                                          state.Flop[2],
-                                                         state.Turn,
-                                                         state.River });
+                                                         state.Turn.Value,
+                                                         state.River.Value });
 
                     if (best == null)
                     {

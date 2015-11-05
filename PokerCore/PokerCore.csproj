@@ -20,6 +20,7 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <PlatformTarget>x64</PlatformTarget>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -33,6 +34,9 @@
     <Reference Include="Cudafy.NET">
       <HintPath>packages\CUDAfy.NET.1.29.5576.13786\lib\net40\Cudafy.NET.dll</HintPath>
     </Reference>
+    <Reference Include="Ionic.Zip">
+      <HintPath>packages\DotNetZip.1.9.6\lib\net20\Ionic.Zip.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
@@ -43,15 +47,21 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Action.cs" />
+    <Compile Include="Algo\Alpha.cs" />
     <Compile Include="Card.cs" />
+    <Compile Include="Data\FullHistory.cs" />
+    <Compile Include="Data\GameHistory.cs" />
+    <Compile Include="Data\PlayerHistorical.cs" />
     <Compile Include="Deck.cs" />
     <Compile Include="Enums.cs" />
     <Compile Include="GameEngine.cs" />
     <Compile Include="Gpu\HandEvaluator.cs" />
     <Compile Include="Gpu\HandIterator.cs" />
     <Compile Include="Hand.cs" />
+    <Compile Include="IGameHistory.cs" />
     <Compile Include="IGameState.cs" />
     <Compile Include="IPlayer.cs" />
+    <Compile Include="Model\PreflopKNN.cs" />
     <Compile Include="PlayerAction.cs" />
     <Compile Include="PreFlopPair.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

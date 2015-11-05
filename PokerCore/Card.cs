@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 
 namespace PokerCore
 {
+    [Serializable]
     public struct Card
     {
         public Card(CardRank rank, CardSuit suit)
@@ -21,6 +22,11 @@ namespace PokerCore
         public override string ToString()
         {
             return string.Format("{0} {1}", Rank, Suit);
+        }
+
+        public ulong Mask
+        {
+            get { return Gpu.Hand.ConvertCard(this); }
         }
 
         #region Cards
@@ -82,6 +88,7 @@ namespace PokerCore
         #endregion
     }
 
+    [Serializable]
     public struct CardPair
     {
         public CardPair(Card card1, Card card2)
@@ -92,5 +99,15 @@ namespace PokerCore
 
         public Card Card1;
         public Card Card2;
+
+        public ulong Mask
+        {
+            get { return PokerCore.Gpu.Hand.ConvertHand(new[] { Card1, Card2 }); }
+        }
+
+        public PreflopPair PreflopPair
+        {
+            get { return PokerCore.Gpu.Hand.PocketHand169Type(Mask); }
+        }
     }
 }
